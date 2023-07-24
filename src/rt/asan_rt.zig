@@ -1,0 +1,42 @@
+// TODO: implement these asan checks
+// SRC: https://github.com/llvm-mirror/compiler-rt/tree/master/lib/asan
+
+// __asan_version_mismatch_check_v8
+// __asan_unregister_image_globals
+// __asan_stack_malloc_9
+// __asan_stack_malloc_8
+// __asan_stack_malloc_7
+// __asan_stack_malloc_6
+// __asan_stack_malloc_5
+// __asan_stack_malloc_4
+// __asan_stack_malloc_3
+// __asan_stack_malloc_2
+// __asan_stack_malloc_1
+// __asan_stack_malloc_0
+// __asan_stack_free_9
+// __asan_stack_free_8
+// __asan_stack_free_7
+// __asan_stack_free_6
+// __asan_stack_free_5
+// __asan_set_shadow_f8
+// __asan_set_shadow_f5
+// __asan_set_shadow_00
+// __asan_report_store_n
+// __asan_report_store8
+// __asan_report_store4
+// __asan_report_store2
+// __asan_report_store1
+// __asan_report_load_n
+// __asan_report_load8
+// __asan_report_load4
+// __asan_report_load2
+// __asan_alloca_poison
+// __asan_allocas_unpoison
+// __asan_handle_no_return
+// __asan_init
+// __asan_memcpy
+// __asan_memmove
+// __asan_memset
+// __asan_option_detect_stack_use_after_return
+// __asan_register_image_globals
+// __asan_report_load1
