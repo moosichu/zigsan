@@ -58,6 +58,43 @@ const ShiftOutOfBoundsData = extern struct {
     rhs_type_descriptor: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
 };
 
+const OutOfBoundsData = extern struct {
+    source_location: ubsan_value.SourceLocation,
+    array_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+    index_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+};
+
+const UnreachableData = extern struct {
+    source_location: ubsan_value.SourceLocation,
+};
+
+const AmbiguousFloatCastOverflowData = extern struct {
+    pub fn tryCastToV2(self: *AmbiguousFloatCastOverflowData) ?*FloatCastOverflowDataV2 {
+        const overflow_data: *FloatCastOverflowDataV1 = @alignCast(@ptrCast(self));
+        // Using the fact that the FloatCastOverflowDataV2's first field is a
+        // string, which shouldn't have it's first two bytes match the valid]
+        // type descriptor kinds.
+        if (overflow_data.from_type.kind.isValid()) {
+            return null; // we are almost definitely a "v1" type descriptor!
+        }
+        return @alignCast(@ptrCast(self));
+    }
+};
+
+// Older compiled programs had a different format for passing-through float-cast
+// overflow data - so we have to as well. ubsan uses a heauristic to try and
+// guess which one has been passed through so we have to match that also!
+const FloatCastOverflowDataV1 = extern struct {
+    from_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+    to_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+};
+
+const FloatCastOverflowDataV2 = extern struct {
+    source_location: ubsan_value.SourceLocation,
+    from_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+    to_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+};
+
 // C++ handler types
 
 const DynamicTypeCacheMissData = extern struct {
@@ -85,7 +122,7 @@ fn exportHandlers(comptime handlers: anytype, comptime export_name: []const u8) 
 }
 
 fn ubsan_log_wrapper(comptime log: anytype, comptime format: []const u8, args: anytype) void {
-    log("ubsan: " ++ format ++ "{s}:{}:{}\n", args);
+    log("ubsan: " ++ format ++ "{s}:{any}:{any}\n", args);
 }
 
 fn ubsan_panic(comptime format: []const u8, args: anytype) void {
@@ -178,7 +215,7 @@ fn handleDivremOverflow(comptime report_log: anytype, overflow_data: *OverflowDa
             const format_string = "Division by 0\n";
             report_log(format_string, .{ source_location.file_name orelse "", source_location.line, source_location.column });
         },
-        .unknown => {
+        else => {
             unreachable;
         },
     }
@@ -220,10 +257,22 @@ fn handleShiftOutOfBounds(comptime report_log: anytype, shift_out_of_bounds_data
 
     if (lhs_type_descriptor.isNegative(lhs)) {
         const base = lhs_type_descriptor.getSignedIntValue(lhs);
-        report_log("Left shift of {}, a negative value\n", .{ base, source_location.file_name orelse "", source_location.line, source_location.column });
+        report_log("Left shift of {}, a negative value\n", .{
+            base,
+            source_location.file_name orelse "",
+            source_location.line,
+            source_location.column,
+        });
     } else {
         const base = lhs_type_descriptor.getPositiveIntValue(lhs);
-        report_log("Left shift of {} by {} cannot be represented by a {s}\n", .{ base, exponent, lhs_type_descriptor.getNameAsString(), source_location.file_name orelse "", source_location.line, source_location.column });
+        report_log("Left shift of {} by {} cannot be represented by a {s}\n", .{
+            base,
+            exponent,
+            lhs_type_descriptor.getNameAsString(),
+            source_location.file_name orelse "",
+            source_location.line,
+            source_location.column,
+        });
     }
 }
 
@@ -237,6 +286,131 @@ comptime {
         }
     };
     exportHandlers(handlers, "handle_shift_out_of_bounds");
+}
+
+fn handleOutOfBounds(comptime report_log: anytype, out_of_bounds_data: *OutOfBoundsData, index: ubsan_value.ValueHandle) void {
+    const source_location = out_of_bounds_data.source_location.acquire();
+    if (out_of_bounds_data.index_type.isSignedInteger()) {
+        const index_value = out_of_bounds_data.index_type.getSignedIntValue(index);
+        report_log("Index {} out of bounds for type {s}\n", .{
+            index_value,
+            out_of_bounds_data.array_type.getNameAsString(),
+            source_location.file_name orelse "",
+            source_location.line,
+            source_location.column,
+        });
+    } else {
+        const index_value = out_of_bounds_data.index_type.getUnsignedIntValue(index);
+        report_log("Index {} out of bounds for type {s}\n", .{
+            index_value,
+            out_of_bounds_data.array_type.getNameAsString(),
+            source_location.file_name orelse "",
+            source_location.line,
+            source_location.column,
+        });
+    }
+}
+
+comptime {
+    const handlers = struct {
+        pub fn recover_handler(out_of_bounds_data: *OutOfBoundsData, index: ubsan_value.ValueHandle) callconv(.C) void {
+            handleOutOfBounds(warn_log, out_of_bounds_data, index);
+        }
+        pub fn abort_handler(out_of_bounds_data: *OutOfBoundsData, index: ubsan_value.ValueHandle) callconv(.C) void {
+            handleOutOfBounds(abort_log, out_of_bounds_data, index);
+        }
+    };
+    exportHandlers(handlers, "handle_out_of_bounds");
+}
+
+fn handleBuiltinUnreachable(comptime report_log: anytype, unreachable_data: *UnreachableData) void {
+    const source_location = unreachable_data.source_location.acquire();
+    report_log("Reached an unreachable location\n", .{
+        source_location.file_name orelse "",
+        source_location.line,
+        source_location.column,
+    });
+}
+
+comptime {
+    const handlers = struct {
+        pub fn recover_handler(unreachable_data: *UnreachableData) callconv(.C) void {
+            handleBuiltinUnreachable(warn_log, unreachable_data);
+        }
+        pub fn abort_handler(unreachable_data: *UnreachableData) callconv(.C) void {
+            handleBuiltinUnreachable(abort_log, unreachable_data);
+        }
+    };
+    exportHandlers(handlers, "handle_builtin_unreachable");
+}
+
+fn handleMissingReturn(comptime report_log: anytype, unreachable_data: *UnreachableData) void {
+    const source_location = unreachable_data.source_location.acquire();
+    report_log("Reached the end of value-returning function without returning a value\n", .{
+        source_location.file_name orelse "",
+        source_location.line,
+        source_location.column,
+    });
+}
+
+comptime {
+    const handlers = struct {
+        pub fn recover_handler(unreachable_data: *UnreachableData) callconv(.C) void {
+            handleMissingReturn(warn_log, unreachable_data);
+        }
+        pub fn abort_handler(unreachable_data: *UnreachableData) callconv(.C) void {
+            handleMissingReturn(abort_log, unreachable_data);
+        }
+    };
+    exportHandlers(handlers, "handle_missing_return");
+}
+
+fn handleFloatCastOverflow(comptime report_log: anytype, ambiguous_overflow_data: *AmbiguousFloatCastOverflowData, from: ubsan_value.ValueHandle, report_options: ubsan_value.ReportOptions) void {
+    var file_name: [*:0]const u8 = undefined;
+    var line: i64 = undefined;
+    var column: i64 = undefined;
+    var from_type: *const ubsan_value.TypeDescriptor = undefined;
+    var to_type: *const ubsan_value.TypeDescriptor = undefined;
+    if (ambiguous_overflow_data.tryCastToV2()) |overflow_data| {
+        const source_location = overflow_data.source_location.acquire();
+        file_name = source_location.file_name orelse "";
+        line = source_location.line;
+        column = source_location.column;
+
+        from_type = overflow_data.from_type;
+        to_type = overflow_data.to_type;
+    } else {
+        const overflow_data: *FloatCastOverflowDataV1 = @alignCast(@ptrCast(ambiguous_overflow_data));
+        _ = report_options;
+        // TODO: look at how old-style source location is properly aquired!
+        file_name = "";
+        line = -1;
+        column = -1;
+
+        from_type = overflow_data.from_type;
+        to_type = overflow_data.to_type;
+    }
+
+    report_log("The {s} value {} is out of range for the type {s}\n", .{
+        from_type.getNameAsString(),
+        ubsan_value.Value{ .type_descriptor = from_type, .value_handle = from },
+        to_type.getNameAsString(),
+        file_name,
+        line,
+        column,
+    });
+}
+
+comptime {
+    const handlers = struct {
+        pub fn recover_handler(overflow_data: *AmbiguousFloatCastOverflowData, from: ubsan_value.ValueHandle, report_options: ubsan_value.ReportOptions) callconv(.C) void {
+            handleFloatCastOverflow(warn_log, overflow_data, from, report_options);
+        }
+        pub fn abort_handler(overflow_data: *AmbiguousFloatCastOverflowData, from: ubsan_value.ValueHandle, report_options: ubsan_value.ReportOptions) callconv(.C) void {
+            handleFloatCastOverflow(abort_log, overflow_data, from, report_options);
+        }
+    };
+    exportHandlers(handlers, "handle_float_cast_overflow");
 }
 
 // C++ handlers
@@ -266,7 +440,8 @@ fn handleFunctionTypeMismatch(comptime report_log: anytype, function_type_mismat
 
     if (ubsan_type_hash.checkTypeInfoEquality(calleeRtti, fnRtti)) {
         // Function types are equal - no mis-match
-        return;
+        @panic("PANCI");
+        // return;
     }
 
     const source_location = function_type_mismatch_data.source_location.acquire();
@@ -283,6 +458,7 @@ fn handleFunctionTypeMismatch(comptime report_log: anytype, function_type_mismat
     // https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
 
     report_log("Call to function through incorrect function type {s}\n", .{ function_type_mismatch_data.type_descriptor.getNameAsString(), source_location.file_name orelse "", source_location.line, source_location.column });
+    @panic("PANCI");
 }
 
 comptime {
@@ -307,11 +483,11 @@ comptime {
         .{ "handle_negate_overflow", "negate-overflow", .Both, .Minimal },
         .{ "handle_divrem_overflow", "divrem-overflow", .Both, .Minimal },
         .{ "handle_shift_out_of_bounds", "shift-out-of-bounds", .Both, .Minimal },
-        .{ "handle_out_of_bounds", "out-of-bounds", .Both, .Both },
-        .{ "handle_builtin_unreachable", "builtin-unreachable", .Recover, .Both },
-        .{ "handle_missing_return", "missing-return", .Recover, .Both },
+        .{ "handle_out_of_bounds", "out-of-bounds", .Both, .Minimal },
+        .{ "handle_builtin_unreachable", "builtin-unreachable", .Recover, .Minimal },
+        .{ "handle_missing_return", "missing-return", .Recover, .Minimal },
         .{ "handle_vla_bound_not_positive", "vla-bound-not-positive", .Both, .Both },
-        .{ "handle_float_cast_overflow", "float-cast-overflow", .Both, .Both },
+        .{ "handle_float_cast_overflow", "float-cast-overflow", .Both, .Minimal },
         .{ "handle_load_invalid_value", "load-invalid-value", .Both, .Both },
         .{ "handle_invalid_builtin", "invalid-builtin", .Both, .Both },
         .{ "handle_function_type_mismatch", "function-type-mismatch", .Both, .Both },
@@ -324,19 +500,7 @@ comptime {
         .{ "handle_cfi_check_fail", "cfi-check-fail", .Both, .Both },
         .{ "handle_type_mismatch_v1", "type-mismatch-v1", .Both, .Full },
         .{ "handle_function_type_mismatch_v1", "function-type-mismatch-v1", .Both, .Minimal },
-        // .{ "handle_dynamic_type_cache_miss", "dynamic-type-cache-miss", .Both, .Full },
         .{ "vptr_type_cache", "vptr-type-cache", .Recover, .Full },
-        .{ "handle_sub_overflow_abort", "sub-overflow-abort", .Abort, .Full },
-        // .{ "handle_shift_out_of_bounds_abort", "shift-out-of-bounds-abort", .Abort, .Full },
-        .{ "handle_pointer_overflow_abort", "pointer-overflow-abort", .Abort, .Full },
-        .{ "handle_out_of_bounds_abort", "out-of-bounds-abort", .Abort, .Full },
-        .{ "handle_nonnull_arg_abort", "nonnull-arg-abort", .Abort, .Full },
-        .{ "handle_negate_overflow_abort", "negate-overflow-abort", .Abort, .Full },
-        .{ "handle_mul_overflow_abort", "mul-overflow-abort", .Abort, .Full },
-        .{ "handle_load_invalid_value_abort", "load-invalid-value-abort", .Abort, .Full },
-        .{ "handle_float_cast_overflow_abort", "float-cast-overflow-abort", .Abort, .Full },
-        .{ "handle_divrem_overflow_abort", "divrem-overflow-abort", .Abort, .Full },
-        .{ "handle_add_overflow_abort", "add-overflow-abort", .Abort, .Full },
     };
 
     const linkage: std.builtin.GlobalLinkage = if (builtin.is_test) .Internal else .Weak;
@@ -370,6 +534,3 @@ comptime {
         }
     }
 }
-
-// TODO: Write proper test harness for this stuff!
-test "overflow handlers" {}

@@ -39,11 +39,16 @@ pub fn build(b: *std.Build) void {
 
     main_tests.linkLibrary(ubsan_rt);
 
-    // TODO: Add tests for ubsan minimal and non-recoverable traps and more!
-    main_tests.addCSourceFile("src/testing/ubsan_c_tests.c", &[_][]const u8{
+    const ubsan_compile_test_args = [_][]const u8{
         "-fno-sanitize-trap=undefined",
+        "-fsanitize=function",
+        "-Wno-everything",
         // "-fno-sanitize-recover=all",
-    });
+    };
+
+    // TODO: Add tests for ubsan minimal and non-recoverable traps and more!
+    main_tests.addCSourceFile("src/testing/ubsan_tests.c", &ubsan_compile_test_args);
+    main_tests.addCSourceFile("src/testing/ubsan_tests.cpp", &ubsan_compile_test_args);
 
     const run_main_tests = b.addRunArtifact(main_tests);
 

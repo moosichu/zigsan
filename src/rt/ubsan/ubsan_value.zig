@@ -3,9 +3,19 @@
 // This file is part of [zig](https://ziglang.org/), which is MIT licensed.
 // The MIT license requires this copyright notice to be included in all copies
 // and substantial portions of the software.
+const std = @import("std");
+const builtin = @import("builtin");
+
+pub const ReportOptions = extern struct {
+    // if from_unrecoverable_handler is true, the handler isn't expected to return
+    from_unrecoverable_handler: bool,
+    /// pc/bp are used to unwind the stack trace.
+    pc: *anyopaque,
+    bp: *anyopaque,
+};
 
 pub const SourceLocation = extern struct {
-    file_name: ?[*:0]u8,
+    file_name: ?[*:0]const u8,
     line: u32,
     column: u32,
 
@@ -24,6 +34,11 @@ pub const SourceLocation = extern struct {
     pub fn isDisabled(source_location: *const SourceLocation) bool {
         return source_location.column == ~@as(u32, 0);
     }
+
+    // TODO: Implement this!
+    // pub fn format(self: SourceLocation, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+    //     writer.
+    // }
 };
 
 pub const TypeKind = enum(u16) {
@@ -36,6 +51,33 @@ pub const TypeKind = enum(u16) {
     float = 0x0001,
     // Any other type. The value representation is unspecified.
     unknown = 0xffff,
+    _,
+
+    pub fn isValid(self: TypeKind) bool {
+        switch (self) {
+            .integer, .float, .unknown => return true,
+            else => return false,
+        }
+    }
+};
+
+pub const Value = struct {
+    type_descriptor: *const TypeDescriptor,
+    value_handle: ValueHandle,
+    pub fn format(self: Value, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+        if (self.type_descriptor.isSignedInteger()) {
+            return writer.print("{}", .{self.type_descriptor.getSignedIntValue(self.value_handle)});
+        } else if (self.type_descriptor.kind == .integer) {
+            return writer.print("{}", .{self.type_descriptor.getPositiveIntValue(self.value_handle)});
+        } else if (self.type_descriptor.kind == .float) {
+            return writer.print("{}", .{self.type_descriptor.getFloatValue(self.value_handle)});
+        }
+
+        unreachable;
+        // return write.print("{}
+    }
 };
 
 pub const TypeDescriptor = extern struct {
@@ -107,6 +149,60 @@ pub const TypeDescriptor = extern struct {
             return false;
         }
         return type_descriptor.getSignedIntValue(value_handle) < 0;
+    }
+
+    pub fn decodeFloat(comptime float_type: type, value_handle: ValueHandle) float_type {
+        if (@bitSizeOf(float_type) <= @bitSizeOf(ValueHandle)) {
+            // We need to ensure the thing we are pointing to is decoded correctly!
+            switch (@bitSizeOf(float_type)) {
+                16 => switch (builtin.cpu.arch.endian()) {
+                    .Big => {
+                        const pointer_end = &(@as([*]const ValueHandle, @ptrCast(&value_handle))[1]);
+                        const result = (@as([*]const f16, @ptrCast(pointer_end)) - 1)[0];
+                        return result;
+                    },
+                    .Little => {
+                        const result = @as(*const f16, @ptrCast(&value_handle)).*;
+                        return result;
+                    },
+                },
+                32 => switch (builtin.cpu.arch.endian()) {
+                    .Big => {
+                        const pointer_end = &(@as([*]const ValueHandle, @ptrCast(&value_handle))[1]);
+                        const result = (@as([*]const f32, @ptrCast(pointer_end)) - 1)[0];
+                        return result;
+                    },
+                    .Little => {
+                        const result: f32 = @as(*const f32, @ptrCast(&value_handle)).*;
+                        return result;
+                    },
+                },
+                64 => {
+                    const result: f64 = @as(*const f64, @ptrCast(&value_handle)).*;
+                    return result;
+                },
+                else => unreachable,
+            }
+        } else {
+            const result = @as(*float_type, @alignCast(@ptrCast(value_handle))).*;
+            return result;
+        }
+    }
+
+    pub fn getFloatValue(type_descriptor: *const TypeDescriptor, value_handle: ValueHandle) f128 {
+        if (type_descriptor.getFloatBitSize() > @bitSizeOf(f128)) unreachable;
+
+        switch (type_descriptor.getFloatBitSize()) {
+            16 => return decodeFloat(f16, value_handle),
+            32 => return decodeFloat(f32, value_handle),
+            64 => return decodeFloat(f64, value_handle),
+            // TODO: verify that this actually works on intel hardware?
+            80 => return decodeFloat(f80, value_handle),
+            // TODO: Handle this!
+            // 96 => return decodeFloat(f96, value_handle),
+            128 => return decodeFloat(f128, value_handle),
+            else => unreachable,
+        }
     }
 };
 
