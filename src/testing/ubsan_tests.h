@@ -1,21 +1,21 @@
 #include <stdint.h>
 
-void addition_overflow(void);
-void subtraction_overflow(void);
-void multiplication_overflow(void);
-void negation_overflow(void);
-void division_overflow(void);
-void division_by_0(void);
-void shift_by_negative(void);
-void shift_out_of_bounds(void);
-void shift_out_of_bounds_2(void);
-void array_out_of_bounds(void);
-void function_type_mismatch(void);
-void builtin_unreachable(void);
-void f16_cast_overflow(void);
-void f32_cast_overflow(void);
-void f64_cast_overflow(void);
-void f80_cast_overflow(void);
+void additionOverflow(void);
+void subtractionOverflow(void);
+void multiplicationOverflow(void);
+void negationOverflow(void);
+void divisionOverflow(void);
+void divisionBy0(void);
+void shiftByNegative(void);
+void shiftOutOfBounds(void);
+void shiftOutOfBounds2(void);
+void arrayOutOfBounds(void);
+void functionTypeMismatch(void);
+void builtinUnreachable(void);
+void f16CastOverflow(void);
+void f32CastOverflow(void);
+void f64CastOverflow(void);
+void f80CastOverflow(void);
 
 // C++ only errors
 int32_t empty_return(void);
