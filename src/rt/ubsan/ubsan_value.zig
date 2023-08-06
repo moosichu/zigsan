@@ -14,6 +14,11 @@ pub const ReportOptions = extern struct {
     bp: *anyopaque,
 };
 
+pub const ErrorType = enum {
+    invalid_bool_load,
+    invalid_enum_load,
+};
+
 pub const SourceLocation = extern struct {
     file_name: ?[*:0]const u8,
     line: u32,

@@ -16,6 +16,10 @@ void f16CastOverflow(void);
 void f32CastOverflow(void);
 void f64CastOverflow(void);
 void f80CastOverflow(void);
+void alignmentAssumption(void);
+void invalidBool(void);
+void invalidBoolAliased(void);
+void invalidEnum(void);
 
 // C++ only errors
 int32_t empty_return(void);

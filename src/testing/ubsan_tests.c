@@ -1,4 +1,5 @@
 #include "ubsan_tests.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 void additionOverflow(void)
@@ -89,6 +90,55 @@ void f80CastOverflow(void)
 {
     long double max_f80 = __FLT_MAX__;
     int64_t int64 = (int64_t) max_f80;
+}
+
+void alignmentAssumption(void)
+{
+    struct AlignedStruct
+    {
+        int64_t a;
+        int8_t b;
+        int8_t c;
+    } aligned_struct;
+    int64_t int64 = *((int64_t *) &aligned_struct.c);
+}
+
+void invalidBool(void)
+{
+    int8_t bad_bool = 4;
+    bool test_bool = *((bool *) &bad_bool);
+}
+
+// This is considered an enum under the llvm ubsan rt!
+void invalidBoolAliased(void)
+{
+    typedef bool test_bool_type;
+    int8_t bad_bool = 3;
+    test_bool_type test_bool = *((test_bool_type *) &bad_bool);
+}
+
+void invalidEnum(void)
+{
+    enum Enum
+    {
+        a = 0,
+        b = 1,
+        c = 2,
+    };
+
+    int bad_enum = 5;
+    enum Enum enum_value = *((enum Enum *) &bad_enum);
+}
+
+void notNull(__nonnull void * arg) {}
+void nonNull(void)
+{
+    notNull(0);
+}
+
+void dereferenceNull(void)
+{
+    int32_t int32 = *((int32_t *) (0));
 }
 
 void testFunction(int32_t arg) {}

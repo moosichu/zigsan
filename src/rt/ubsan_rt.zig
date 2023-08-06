@@ -29,6 +29,16 @@ export fn setCustomRecoverHandler(new_custom_recover_handler: *const fn (error_m
     custom_recover_handler = new_custom_recover_handler;
 }
 
+// TODO: Really refine the error messages - go through each ubsan error and make
+// sure that for the average user that hasn't dealt with ubsan before, it's very
+// clear what the problem is, what needs to be actioned, why it needs to be
+// actioned and how to action it. (or otherwise - how to supress the specific
+// ubsan indicideent or disable it entirely!)
+//
+// This is becuase users picking up zig cc will be doing so from vanilla clang
+// (or other C/C++ compilers) which don't have ubsan enabled by default, so we
+// want to really ensure that we minimise how jarring that experience is.
+
 // Creates two handlers for a given error, both of them print the specified
 // return message but the `abort_` version stops the execution of the program
 // XXX: Don't depend on the stdlib
@@ -108,6 +118,19 @@ const FunctionTypeMismatchData = extern struct {
     source_location: ubsan_value.SourceLocation,
     type_descriptor: *const ubsan_value.TypeDescriptor,
 };
+
+const InvalidValueData = extern struct {
+    source_location: ubsan_value.SourceLocation,
+    type_descriptor: *const ubsan_value.TypeDescriptor,
+};
+
+fn ignoreReport(source_location: ubsan_value.SourceLocation, report_options: ubsan_value.ReportOptions, error_type: ubsan_value.ErrorType) bool {
+    _ = source_location;
+    _ = report_options;
+    _ = error_type;
+    // TODO: Implement me! (and propagate this everywhere!)
+    return false;
+}
 
 fn exportHandlers(comptime handlers: anytype, comptime export_name: []const u8) void {
     const linkage: std.builtin.GlobalLinkage = if (builtin.is_test) .Internal else .Weak;
@@ -413,6 +436,73 @@ comptime {
     exportHandlers(handlers, "handle_float_cast_overflow");
 }
 
+fn handleLoadInvalidValue(comptime report_log: anytype, invalid_value_data: *InvalidValueData, value: ubsan_value.ValueHandle, report_options: ubsan_value.ReportOptions) void {
+    const source_location = invalid_value_data.source_location.acquire();
+    const type_name = invalid_value_data.type_descriptor.getNameAsString();
+    // The logic here is a little different from LLVM's ubsan implementation,
+    // which seemingly has bugs.
+    // Their check is:
+    // ```C++
+    // bool IsBool = (0 == internal_strcmp(Data->Type.getTypeName(), "'bool'")) ||
+    //               (0 == internal_strncmp(Data->Type.getTypeName(), "'BOOL'", 6));
+    // Which would pass true for the type names that match any of the characters
+    // or either string. It's also weird that one is a internal_strcmp and the
+    // other a internal_strncmp
+    //
+    // Also if you create an alias for bool it thinks it's an enum with the
+    // llvm ubsan rt implementation!
+    const is_bool = is_bool: {
+        const alias_string = "aka ";
+        var starting_index: usize = 0;
+        while (true) : (starting_index += 1) {
+            if (starting_index < alias_string.len) {
+                if (type_name[starting_index] == 0) {
+                    starting_index = 0;
+                    break;
+                }
+                continue;
+            }
+            if (std.mem.eql(u8, type_name[starting_index - alias_string.len .. starting_index], alias_string)) break;
+            if (type_name[starting_index] == 0) {
+                starting_index = 0;
+                break;
+            }
+        }
+        for ("'BOOL'", "'bool'", starting_index..) |bool_char_0, bool_char_1, index| {
+            const type_char = type_name[index];
+            if (type_char == 0) {
+                break :is_bool false;
+            }
+            if (type_char != bool_char_0 and type_char != bool_char_1) {
+                break :is_bool false;
+            }
+        }
+        break :is_bool true;
+    };
+    const error_type = if (is_bool) ubsan_value.ErrorType.invalid_bool_load else ubsan_value.ErrorType.invalid_enum_load;
+    if (ignoreReport(source_location, report_options, error_type)) return;
+
+    report_log("Invalid load of value {} for {s} {s}\n", .{
+        ubsan_value.Value{ .type_descriptor = invalid_value_data.type_descriptor, .value_handle = value },
+        if (is_bool) "type" else "enum",
+        type_name,
+        source_location.file_name orelse "", // TODO: find all of these and find what is appropriate for empty file name!
+        source_location.line,
+        source_location.column,
+    });
+}
+
+comptime {
+    const handlers = struct {
+        pub fn recover_handler(invalid_value_data: *InvalidValueData, value: ubsan_value.ValueHandle, report_options: ubsan_value.ReportOptions) callconv(.C) void {
+            handleLoadInvalidValue(warn_log, invalid_value_data, value, report_options);
+        }
+        pub fn abort_handler(invalid_value_data: *InvalidValueData, value: ubsan_value.ValueHandle, report_options: ubsan_value.ReportOptions) callconv(.C) void {
+            handleLoadInvalidValue(abort_log, invalid_value_data, value, report_options);
+        }
+    };
+    exportHandlers(handlers, "handle_load_invalid_value");
+}
 // C++ handlers
 
 fn handleDynamicTypeCacheMiss(dynamic_type_cache_miss_data: *DynamicTypeCacheMissData, pointer: ubsan_value.ValueHandle, hash: ubsan_value.ValueHandle) bool {
@@ -488,7 +578,7 @@ comptime {
         .{ "handle_missing_return", "missing-return", .Recover, .Minimal },
         .{ "handle_vla_bound_not_positive", "vla-bound-not-positive", .Both, .Both },
         .{ "handle_float_cast_overflow", "float-cast-overflow", .Both, .Minimal },
-        .{ "handle_load_invalid_value", "load-invalid-value", .Both, .Both },
+        .{ "handle_load_invalid_value", "load-invalid-value", .Both, .Minimal }, // TODO: Next!
         .{ "handle_invalid_builtin", "invalid-builtin", .Both, .Both },
         .{ "handle_function_type_mismatch", "function-type-mismatch", .Both, .Both },
         .{ "handle_implicit_conversion", "implicit-conversion", .Both, .Both },

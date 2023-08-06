@@ -41,8 +41,11 @@ pub fn build(b: *std.Build) void {
 
     const ubsan_compile_test_args = [_][]const u8{
         "-fno-sanitize-trap=undefined",
+        "-fsanitize=local-bounds", // not included in -fsanitize=undefined
+        "-fsanitize=float-divide-by-zero", // not included in -fsanitize=undefined
         "-fsanitize=function",
         "-Wno-everything",
+        "-fsanitize=objc-cast", // only supported on Darwin! need to test for this!
         // "-fno-sanitize-recover=all",
     };
 

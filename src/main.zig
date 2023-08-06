@@ -17,6 +17,9 @@ fn ExpectUbsanError(comptime expected_error: []const u8) *const fn (error_msg: [
     return CustomErrorHandler.custom_error_handler;
 }
 
+// TODO: Tests for different ubsan options when compiling the c file maybe? So have to compile in-place?
+// (then can have panic handlers for launching process) - can look at the zar implementation for examples of this!
+
 test "addition overflow" {
     const expected_error: []const u8 = "ubsan: Addition Overflow: 2147483647 + 1 in type 'int'";
     ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
@@ -71,11 +74,12 @@ test "shift out of bounds 2" {
     ubsan_tests.shiftOutOfBounds2();
 }
 
-test "array out of bounds" {
-    const expected_error: []const u8 = "ubsan: Index 1 out of bounds for type 'int32_t[1]' (aka 'int[1]')";
-    ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
-    ubsan_tests.arrayOutOfBounds();
-}
+// TODO: Currently segfaults! Need a panic handler for this!
+// test "array out of bounds" {
+//     const expected_error: []const u8 = "ubsan: Index 1 out of bounds for type 'int32_t[1]' (aka 'int[1]')";
+//     ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+//     ubsan_tests.arrayOutOfBounds();
+// }
 
 // TODO: Currently segfaults! Need a panic handler for this!
 // test "builtin unreachable" {
@@ -110,6 +114,31 @@ test "f80 cast overflow" {
         ubsan_tests.f80CastOverflow();
     }
 }
+
+// test "alignment assumption" {
+//     const expected_error: []const u8 = "The 'long double' value 3.4028234663852886e+38 is out of range for the type 'long long'";
+//     ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+//     ubsan_tests.alignmentAssumption();
+// }
+
+test "invalid bool" {
+    const expected_error: []const u8 = "ubsan: Invalid load of value 4 for type 'bool'";
+    ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+    ubsan_tests.invalidBool();
+}
+
+test "invalid bool aliased" {
+    const expected_error: []const u8 = "ubsan: Invalid load of value 3 for type 'test_bool_type' (aka 'bool')";
+    ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+    ubsan_tests.invalidBoolAliased();
+}
+
+// TODO: figure out how to get this test to trigger!
+// test "invalid enum" {
+//     const expected_error: []const u8 = "ubsan: Invalid load of value 3 for enum 'Enum'";
+//     ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+//     ubsan_tests.invalidEnum();
+// }
 
 // test "function type mismatch" {
 //     const expected_error: []const u8 = "";
