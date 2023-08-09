@@ -19,10 +19,14 @@ pub fn build(b: *std.Build) void {
     // Have to link libCPP as it depends on ubsan C++ standard library functionality
     // TODO: add option to build without C++ sanitisation runtime!
     ubsan_rt.linkLibCpp();
-    ubsan_rt.addCSourceFile("src/rt/ubsan/ubsan_type_hash.cpp", &[_][]const u8{
-        "-Wall",
-        "-Wextra",
-        "-Werror",
+
+    ubsan_rt.addCSourceFile(.{
+        .file = .{ .path = "src/rt/ubsan/ubsan_type_hash.cpp" },
+        .flags = &[_][]const u8{
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+        },
     });
 
     b.installArtifact(ubsan_rt);
@@ -35,7 +39,7 @@ pub fn build(b: *std.Build) void {
 
     main_tests.linkLibC();
     main_tests.linkLibCpp();
-    main_tests.addIncludePath("src");
+    main_tests.addIncludePath(.{ .path = "src" });
 
     main_tests.linkLibrary(ubsan_rt);
 
@@ -51,8 +55,14 @@ pub fn build(b: *std.Build) void {
     };
 
     // TODO: Add tests for ubsan minimal and non-recoverable traps and more!
-    main_tests.addCSourceFile("src/testing/ubsan_tests.c", &ubsan_compile_test_args);
-    main_tests.addCSourceFile("src/testing/ubsan_tests.cpp", &ubsan_compile_test_args);
+    main_tests.addCSourceFile(.{
+        .file = .{ .path = "src/testing/ubsan_tests.c" },
+        .flags = &ubsan_compile_test_args,
+    });
+    main_tests.addCSourceFile(.{
+        .file = .{ .path = "src/testing/ubsan_tests.cpp" },
+        .flags = &ubsan_compile_test_args,
+    });
 
     const run_main_tests = b.addRunArtifact(main_tests);
 
