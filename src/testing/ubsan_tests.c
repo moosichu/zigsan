@@ -149,3 +149,26 @@ void functionTypeMismatch(void)
     wrongFunctionType * wrong_test_functionn = &testFunction;
     int32_t my_result = wrong_test_functionn((uint64_t) 0);
 }
+
+void signedIntegerTruncation(void)
+{
+    int16_t signed_integer = -500;
+    int8_t truncated_integer = signed_integer;
+}
+
+void unsignedIntegerTruncation(void)
+{
+    uint16_t signed_integer = 500;
+    uint8_t truncated_integer = signed_integer;
+}
+
+void signChange(void)
+{
+    int8_t signed_integer = -1;
+    uint16_t unsigned_integer = signed_integer;
+}
+
+void signedIntegerOrSignChange(void)
+{
+    // TODO!
+}

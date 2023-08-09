@@ -20,6 +20,10 @@ void alignmentAssumption(void);
 void invalidBool(void);
 void invalidBoolAliased(void);
 void invalidEnum(void);
+void signedIntegerTruncation(void);
+void unsignedIntegerTruncation(void);
+void signChange(void);
+void signedIntegerOrSignChange(void);
 
 // C++ only errors
 int32_t empty_return(void);

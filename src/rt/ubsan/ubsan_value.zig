@@ -17,6 +17,10 @@ pub const ReportOptions = extern struct {
 pub const ErrorType = enum {
     invalid_bool_load,
     invalid_enum_load,
+    implicit_signed_integer_truncation,
+    implicit_unsigned_integer_truncation,
+    implicit_integer_sign_change,
+    implicit_signed_integer_trunction_or_sign_change,
 };
 
 pub const SourceLocation = extern struct {

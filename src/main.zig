@@ -140,6 +140,24 @@ test "invalid bool aliased" {
 //     ubsan_tests.invalidEnum();
 // }
 
+test "signed integer truncation" {
+    const expected_error: []const u8 = "ubsan: Invalid implicit cast of 16-bit signed integer -500 ('int16_t' (aka 'short')) to 8-bit signed integer 12 ('int8_t' (aka 'signed char'))";
+    ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+    ubsan_tests.signedIntegerTruncation();
+}
+
+test "unsigned integer truncation" {
+    const expected_error: []const u8 = "ubsan: Invalid implicit cast of 16-bit unsigned integer 500 ('uint16_t' (aka 'unsigned short')) to 8-bit unsigned integer 244 ('uint8_t' (aka 'unsigned char'))";
+    ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+    ubsan_tests.unsignedIntegerTruncation();
+}
+
+test "sign change" {
+    const expected_error: []const u8 = "ubsan: Invalid implicit cast of 8-bit signed integer -1 ('int8_t' (aka 'signed char')) to 16-bit unsigned integer 65535 ('uint16_t' (aka 'unsigned short'))";
+    ubsan.setCustomRecoverHandler(ExpectUbsanError(expected_error));
+    ubsan_tests.signChange();
+}
+
 // test "function type mismatch" {
 //     const expected_error: []const u8 = "";
 //     _ = expected_error;

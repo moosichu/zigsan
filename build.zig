@@ -46,6 +46,7 @@ pub fn build(b: *std.Build) void {
         "-fsanitize=function",
         "-Wno-everything",
         "-fsanitize=objc-cast", // only supported on Darwin! need to test for this!
+        "-fsanitize=implicit-conversion",
         // "-fno-sanitize-recover=all",
     };
 

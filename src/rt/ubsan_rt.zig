@@ -33,11 +33,14 @@ export fn setCustomRecoverHandler(new_custom_recover_handler: *const fn (error_m
 // sure that for the average user that hasn't dealt with ubsan before, it's very
 // clear what the problem is, what needs to be actioned, why it needs to be
 // actioned and how to action it. (or otherwise - how to supress the specific
-// ubsan indicideent or disable it entirely!)
+// ubsan indicident or disable it entirely!)
 //
-// This is becuase users picking up zig cc will be doing so from vanilla clang
+// This is because users picking up zig cc will be doing so from vanilla clang
 // (or other C/C++ compilers) which don't have ubsan enabled by default, so we
 // want to really ensure that we minimise how jarring that experience is.
+//
+// Also look at the existing zig runtime undefined behaviour checks and ensure
+// these end up matching!
 
 // Creates two handlers for a given error, both of them print the specified
 // return message but the `abort_` version stops the execution of the program
@@ -109,19 +112,34 @@ const FloatCastOverflowDataV2 = extern struct {
 
 const DynamicTypeCacheMissData = extern struct {
     source_location: ubsan_value.SourceLocation,
-    type_descriptor: *const ubsan_value.TypeDescriptor,
+    type_descriptor: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
     type_info: ?*anyopaque,
     type_check_kind: u8,
 };
 
 const FunctionTypeMismatchData = extern struct {
     source_location: ubsan_value.SourceLocation,
-    type_descriptor: *const ubsan_value.TypeDescriptor,
+    type_descriptor: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
 };
 
 const InvalidValueData = extern struct {
     source_location: ubsan_value.SourceLocation,
-    type_descriptor: *const ubsan_value.TypeDescriptor,
+    type_descriptor: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+};
+
+const ImplicitConversionKind = enum(c_char) {
+    integer_truncation = 0, // Legacy, was only used by clang 7.
+    unsigned_integer_truncation = 1,
+    signed_integer_truncation = 2,
+    sign_change = 3,
+    signed_integer_trunction_or_sign_change = 4,
+};
+
+const ImplicitConversionData = extern struct {
+    source_location: ubsan_value.SourceLocation,
+    from_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+    to_type: *const ubsan_value.TypeDescriptor, // this is a const ref in C++
+    kind: ImplicitConversionKind,
 };
 
 fn ignoreReport(source_location: ubsan_value.SourceLocation, report_options: ubsan_value.ReportOptions, error_type: ubsan_value.ErrorType) bool {
@@ -503,6 +521,54 @@ comptime {
     };
     exportHandlers(handlers, "handle_load_invalid_value");
 }
+
+fn handleImplicitConversion(comptime report_log: anytype, implicit_conversion_data: *ImplicitConversionData, from: ubsan_value.ValueHandle, to: ubsan_value.ValueHandle, report_options: ubsan_value.ReportOptions) void {
+    const source_location = implicit_conversion_data.source_location.acquire();
+    const error_type: ubsan_value.ErrorType = switch (implicit_conversion_data.kind) {
+        .integer_truncation => error_type: {
+            if (implicit_conversion_data.from_type.isSignedInteger() or implicit_conversion_data.to_type.isSignedInteger()) {
+                break :error_type .implicit_signed_integer_truncation;
+            }
+            break :error_type .implicit_unsigned_integer_truncation;
+        },
+        .signed_integer_truncation => .implicit_signed_integer_truncation,
+        .unsigned_integer_truncation => .implicit_unsigned_integer_truncation,
+        .sign_change => .implicit_integer_sign_change,
+        .signed_integer_trunction_or_sign_change => .implicit_signed_integer_trunction_or_sign_change,
+    };
+
+    if (ignoreReport(source_location, report_options, error_type)) return;
+
+    report_log("Invalid implicit cast of {}-bit {s} integer {} ({s}) to {}-bit {s} integer {} ({s})\n", .{
+        implicit_conversion_data.from_type.getIntegerBitSize(),
+        if (implicit_conversion_data.from_type.isSignedInteger()) "signed" else "unsigned",
+        ubsan_value.Value{ .type_descriptor = implicit_conversion_data.from_type, .value_handle = from },
+        implicit_conversion_data.from_type.getNameAsString(),
+        implicit_conversion_data.to_type.getIntegerBitSize(),
+        if (implicit_conversion_data.to_type.isSignedInteger()) "signed" else "unsigned",
+        ubsan_value.Value{ .type_descriptor = implicit_conversion_data.to_type, .value_handle = to },
+        implicit_conversion_data.to_type.getNameAsString(),
+        source_location.file_name orelse "", // TODO: find all of these and find what is appropriate for empty file name!
+        source_location.line,
+        source_location.column,
+    });
+}
+
+comptime {
+    const handlers = struct {
+        pub fn recover_handler(implicit_conversion_data: *ImplicitConversionData, from: ubsan_value.ValueHandle, to: ubsan_value.ValueHandle) callconv(.C) void {
+            handleImplicitConversion(warn_log, implicit_conversion_data, from, to, undefined);
+        }
+        pub fn abort_handler(implicit_conversion_data: *ImplicitConversionData, from: ubsan_value.ValueHandle, to: ubsan_value.ValueHandle) callconv(.C) void {
+            // TODO(TRC):NowNow construct report option!
+            // https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/sanitizer_common/sanitizer_stacktrace.h#L178
+            // https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/ubsan/ubsan_diag.h#L233
+            handleImplicitConversion(abort_log, implicit_conversion_data, from, to, undefined);
+        }
+    };
+    exportHandlers(handlers, "handle_implicit_conversion");
+}
+
 // C++ handlers
 
 fn handleDynamicTypeCacheMiss(dynamic_type_cache_miss_data: *DynamicTypeCacheMissData, pointer: ubsan_value.ValueHandle, hash: ubsan_value.ValueHandle) bool {
@@ -578,10 +644,10 @@ comptime {
         .{ "handle_missing_return", "missing-return", .Recover, .Minimal },
         .{ "handle_vla_bound_not_positive", "vla-bound-not-positive", .Both, .Both },
         .{ "handle_float_cast_overflow", "float-cast-overflow", .Both, .Minimal },
-        .{ "handle_load_invalid_value", "load-invalid-value", .Both, .Minimal }, // TODO: Next!
+        .{ "handle_load_invalid_value", "load-invalid-value", .Both, .Minimal },
         .{ "handle_invalid_builtin", "invalid-builtin", .Both, .Both },
         .{ "handle_function_type_mismatch", "function-type-mismatch", .Both, .Both },
-        .{ "handle_implicit_conversion", "implicit-conversion", .Both, .Both },
+        .{ "handle_implicit_conversion", "implicit-conversion", .Both, .Minimal }, // TODO:Next!
         .{ "handle_nonnull_arg", "nonnull-arg", .Both, .Both },
         .{ "handle_nonnull_return", "nonnull-return", .Both, .Both },
         .{ "handle_nullability_arg", "nullability-arg", .Both, .Both },
