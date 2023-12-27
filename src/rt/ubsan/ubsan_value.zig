@@ -165,23 +165,23 @@ pub const TypeDescriptor = extern struct {
             // We need to ensure the thing we are pointing to is decoded correctly!
             switch (@bitSizeOf(float_type)) {
                 16 => switch (builtin.cpu.arch.endian()) {
-                    .Big => {
+                    .big => {
                         const pointer_end = &(@as([*]const ValueHandle, @ptrCast(&value_handle))[1]);
                         const result = (@as([*]const f16, @ptrCast(pointer_end)) - 1)[0];
                         return result;
                     },
-                    .Little => {
+                    .little => {
                         const result = @as(*const f16, @ptrCast(&value_handle)).*;
                         return result;
                     },
                 },
                 32 => switch (builtin.cpu.arch.endian()) {
-                    .Big => {
+                    .big => {
                         const pointer_end = &(@as([*]const ValueHandle, @ptrCast(&value_handle))[1]);
                         const result = (@as([*]const f32, @ptrCast(pointer_end)) - 1)[0];
                         return result;
                     },
-                    .Little => {
+                    .little => {
                         const result: f32 = @as(*const f32, @ptrCast(&value_handle)).*;
                         return result;
                     },

@@ -25,8 +25,8 @@ const logger = std.log.scoped(.ubsan);
 
 threadlocal var custom_recover_handler: ?*const fn (error_msg: []const u8) void = null;
 
-export fn setCustomRecoverHandler(new_custom_recover_handler: *const fn (error_msg: []const u8) void) void {
-    custom_recover_handler = new_custom_recover_handler;
+export fn setCustomRecoverHandler(new_custom_recover_handler: **const fn (error_msg: []const u8) void) void {
+    custom_recover_handler = new_custom_recover_handler.*;
 }
 
 // TODO: Really refine the error messages - go through each ubsan error and make
@@ -661,7 +661,7 @@ comptime {
 
     const linkage: std.builtin.GlobalLinkage = if (builtin.is_test) .Internal else .Weak;
 
-    inline for (HANDLERS) |entry| {
+    for (HANDLERS) |entry| {
         const handler = makeHandler(entry[1]);
 
         if ((entry[2] == .Both or entry[2] == .Recover) and (entry[3] == .Both or entry[3] == .Full)) {
