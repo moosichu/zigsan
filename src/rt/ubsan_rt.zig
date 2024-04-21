@@ -151,7 +151,7 @@ fn ignoreReport(source_location: ubsan_value.SourceLocation, report_options: ubs
 }
 
 fn exportHandlers(comptime handlers: anytype, comptime export_name: []const u8) void {
-    const linkage: std.builtin.GlobalLinkage = if (builtin.is_test) .Internal else .Weak;
+    const linkage: std.builtin.GlobalLinkage = if (builtin.is_test) .internal else .weak;
     {
         const handler_symbol = std.builtin.ExportOptions{ .name = "__ubsan_" ++ export_name, .linkage = linkage };
         @export(handlers.recover_handler, handler_symbol);
@@ -659,7 +659,7 @@ comptime {
         .{ "vptr_type_cache", "vptr-type-cache", .Recover, .Full },
     };
 
-    const linkage: std.builtin.GlobalLinkage = if (builtin.is_test) .Internal else .Weak;
+    const linkage: std.builtin.GlobalLinkage = if (builtin.is_test) .internal else .weak;
 
     for (HANDLERS) |entry| {
         const handler = makeHandler(entry[1]);

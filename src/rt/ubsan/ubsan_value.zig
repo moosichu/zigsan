@@ -32,7 +32,7 @@ pub const SourceLocation = extern struct {
         // TODO: Figure out why zig gives the error
         // error: @atomicRmw atomic ordering must not be Unordered
         // const returnColumn: u32 = @atomicRmw(u32, &source_location.column, .Xchg, ~@as(u32, 0), .Unordered);
-        const returnColumn: u32 = @atomicRmw(u32, &source_location.column, .Xchg, ~@as(u32, 0), .Monotonic);
+        const returnColumn: u32 = @atomicRmw(u32, &source_location.column, .Xchg, ~@as(u32, 0), .monotonic);
         return SourceLocation{
             .file_name = source_location.file_name,
             .line = source_location.line,

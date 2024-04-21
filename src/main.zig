@@ -90,33 +90,33 @@ test "shift out of bounds 2" {
 // }
 
 test "f16 cast overflow" {
-    const expected_error: []const u8 = "ubsan: The '_Float16' value 6.5504e+04 is out of range for the type 'short'";
+    const expected_error: []const u8 = "ubsan: The '_Float16' value 6.5504e4 is out of range for the type 'short'";
     ubsan.setCustomRecoverHandler(&ExpectUbsanError(expected_error));
     ubsan_tests.f16CastOverflow();
 }
 
 test "f32 cast overflow" {
-    const expected_error: []const u8 = "ubsan: The 'float' value 3.4028234663852886e+38 is out of range for the type 'int'";
+    const expected_error: []const u8 = "ubsan: The 'float' value 3.4028234663852885981170418348451693e38 is out of range for the type 'int'";
     ubsan.setCustomRecoverHandler(&ExpectUbsanError(expected_error));
     ubsan_tests.f32CastOverflow();
 }
 
 test "f64 cast overflow" {
-    const expected_error: []const u8 = "ubsan: The 'double' value 3.4028234663852886e+38 is out of range for the type 'long long'";
+    const expected_error: []const u8 = "ubsan: The 'double' value 3.4028234663852885981170418348451693e38 is out of range for the type 'long long'";
     ubsan.setCustomRecoverHandler(&ExpectUbsanError(expected_error));
     ubsan_tests.f64CastOverflow();
 }
 
 test "f80 cast overflow" {
     if (builtin.cpu.arch.isX86()) {
-        const expected_error: []const u8 = "The 'long double' value 3.4028234663852886e+38 is out of range for the type 'long long'";
+        const expected_error: []const u8 = "The 'long double' value 3.4028234663852885981170418348451693e38 is out of range for the type 'long long'";
         ubsan.setCustomRecoverHandler(&ExpectUbsanError(expected_error));
         ubsan_tests.f80CastOverflow();
     }
 }
 
 // test "alignment assumption" {
-//     const expected_error: []const u8 = "The 'long double' value 3.4028234663852886e+38 is out of range for the type 'long long'";
+//     const expected_error: []const u8 = "The 'long double' value 3.4028234663852885981170418348451693e38 is out of range for the type 'long long'";
 //     ubsan.setCustomRecoverHandler(&ExpectUbsanError(expected_error));
 //     ubsan_tests.alignmentAssumption();
 // }
