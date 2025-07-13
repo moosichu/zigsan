@@ -1,3 +1,6 @@
+## NOTE: NEVER MANAGED TO COMPLETE
+Fortunately someone else took on the work and created a fab implementation :) https://github.com/ziglang/zig/pull/22488
+
 # zigsan
 A reimplementation of the compiler-rt clang sanitization libraries in the zig programming language.
 
